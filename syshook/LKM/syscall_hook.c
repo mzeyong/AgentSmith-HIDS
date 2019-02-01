@@ -1,6 +1,6 @@
 /*******************************************************************
 * Project:	AgentSmith-HIDS
-* Author:	E_BWill
+* Author:	E_BWill,k2yk
 * Year:		2018
 * File:		syscall_hook.c
 * Description:	Hook execve,connect,init_module,finit_module Syscall
@@ -25,6 +25,7 @@
 #include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/atomic.h>
 #include <linux/fs_struct.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -371,7 +372,7 @@ static char *str_replace(char *orig, char *rep, char *with)
 static void exit_protect_action(void)
 {
     preempt_disable();
-    __this_cpu_inc(THIS_MODULE->refptr->incs);
+    atomic_inc(&THIS_MODULE->refcnt);
     preempt_enable();
 }
 
@@ -382,7 +383,7 @@ static void update_use_count(void)
     if (use_count == 0)
     {
         preempt_disable();
-        __this_cpu_inc(THIS_MODULE->refptr->incs);
+        atomic_inc(&THIS_MODULE->refcnt);
         preempt_enable();
     }
 
@@ -398,7 +399,7 @@ static void del_use_count(void)
     if (use_count == 0)
     {
         preempt_disable();
-        __this_cpu_dec(THIS_MODULE->refptr->incs);
+        atomic_dec(&THIS_MODULE->refcnt);
         preempt_enable();
     }
 
@@ -411,7 +412,7 @@ static struct socket *sockfd_lookup_light(int fd, int *err, int *fput_needed)
     struct socket *sock;
 
     *err = -EBADF;
-    file = fget_light(fd, fput_needed);
+    file = fget(fd);
     if (file)
     {
         sock = sock_from_file(file, err);
@@ -1089,7 +1090,7 @@ static int lkm_init(void)
 {
     int i = 0;
 
-    if (LINUX_VERSION_CODE != KERNEL_VERSION(3, 10, 0))
+    if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0))
     {
         pr_err("KERNEL_VERSION_DON'T_SUPPORT\n");
         return -1;
@@ -1247,5 +1248,5 @@ module_exit(lkm_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.1.4");
-MODULE_AUTHOR("E_Bwill <cy_sniper@yeah.net>");
+MODULE_AUTHOR("k2yk <mzeyong@gmail.com>");
 MODULE_DESCRIPTION("Monitor Syscall: execve,connect,init_module,finit_module");
